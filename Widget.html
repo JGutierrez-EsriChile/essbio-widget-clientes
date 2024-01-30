@@ -1,0 +1,34 @@
+<div id = "contentWidget"  style ="height:100%;">
+	<link
+	rel="stylesheet"
+	href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css"
+	integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2"
+	crossorigin="anonymous"
+  />
+	<div id="tituloCL"></div>
+	<div id="esTroncal">
+		<label class="col-sm-4 col-form-label", for="idTroncal">ID Troncal:</label>
+		<input type="text" id="idTroncal" name="NroTroncal" placeholder="ID Troncal" class="form-control" style="width: 75%;" autocomplete="off" disabled>
+		<select id="inputClientes" name="NroClientes" class="custom-select" style="width: 75%; display: none", data-dojo-attach-event="onchange:selectClientInWidget" >
+			<option value = '', id = 'op0CL'>Seleccione N° Cliente</option>
+		</select>
+	</div>
+	&nbsp;&nbsp;&nbsp;
+	<div id="BuscadorCL">
+		<label class="col-form-label", for="searchClient">N° Cliente:</label>
+		<input type="text" id="searchClient" name="NroCliente" placeholder="Ingrese N° Cliente ej: 2017404" class="form-control" style="width: 75%;" autocomplete="off">
+	</div>
+	<div id="btnFunction">
+		<div class="col">
+		  <button id="botonBuscarRol" style="margin-top: 10px;" class="btn btn-primary btn-sm" type="button" data-dojo-attach-event="onclick:_onclickBuscarClient">
+			<span id="loading-btn-buscar-rol" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>&nbsp;Buscar
+		  </button>
+		  &nbsp;&nbsp;&nbsp;
+		  <input type="button" id="botonLimpiarRol" style="margin-top: 10px;" class="btn btn-primary btn-sm" value="Limpiar búsqueda" data-dojo-attach-event="onclick:clear">
+		</div>
+	</div>
+	<div>&nbsp;</div>
+	<div id="graficosClientes"></div>
+	<div>&nbsp;</div>
+	<div id="espacioCL"></div>
+</div>
