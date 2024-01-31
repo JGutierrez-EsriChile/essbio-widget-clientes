@@ -1,5 +1,5 @@
 {
 	"configText" : "historialClientes",
 	"meses" : ["N/A","ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"],
-	"FeatureServer":"https://sigdesa.essbio.cl/server/rest/services/CLIENTES/FeatureServer/2"
+	"featureLy":"https://sigdesa.essbio.cl/server/rest/services/CLIENTES/FeatureServer/2"
 }
