@@ -14,7 +14,7 @@
 // limitations under the License.
 ///////////////////////////////////////////////////////////////////////////
 define([
-  'dojo/_base/declare','dojo/_base/lang','esri/tasks/query','esri/tasks/QueryTask','dojo/dom-construct','dojo/on',
+  'dojo/_base/declare','dojo/_base/lang','esri/tasks/query','esri/tasks/QueryTask','dojo/dom-construct','dojo/query','dojo/on',
   'dojo/_base/array','jimu/BaseWidget','esri/layers/FeatureLayer','esri/graphic', "esri/layers/GraphicsLayer",
   'jimu/portalUtils','jimu/portalUrlUtils',
   'esri/symbols/SimpleMarkerSymbol','esri/symbols/SimpleLineSymbol','esri/symbols/SimpleFillSymbol',
@@ -23,7 +23,7 @@ define([
   'dojox/charting/plot2d/Columns','dojox/charting/action2d/Highlight','dojox/charting/plot2d/Markers','dojox/charting/axis2d/Default','dojo/domReady!'
 ],
 function(
-  declare, lang, Query, QueryTask, domConstruct, on, array, BaseWidget,FeatureLayer,Graphic, GraphicsLayer, portalUtils, portalUrlUtils,
+  declare, lang, Query, QueryTask, domConstruct, query, on, array, BaseWidget,FeatureLayer,Graphic, GraphicsLayer, portalUtils, portalUrlUtils,
   SimpleMarkerSymbol,SimpleLineSymbol, SimpleFillSymbol, Color, SpatialReference, webMercatorUtils,
   Chart,theme, ColumnsPlot, Highlight
   ) {
@@ -37,7 +37,7 @@ function(
     selChgEvt: null,
     clearFeatsEvt: null,
     meses: [],
-    FeatureServer:"",
+    featureLy:"",
     waitTime: 0,
     baseClass: 'jimu-widget-historialClientes',
 
@@ -50,14 +50,14 @@ function(
     startup: function() {
       this.inherited(arguments);
       //that.map.on("click", lang.hitch(that, that.onMapClick));
-      this.FeatureServer = this.config.FeatureServer
+      this.featureLy = this.config.featureLy
       this.meses = this.config.meses
       console.log('startup');
     },
     onOpen: function(){
       this.clear();
       this.inherited(arguments);
-      this.FeatureServer = this.config.FeatureServer
+      this.featureLy = this.config.featureLy
       this.meses = this.config.meses
       //this.map.setInfoWindowOnClick(false);
       if (this.map.infoWindow.isShowing){this.map.infoWindow.hide();}
@@ -87,56 +87,27 @@ function(
       this.own(this.setFeatsEvt = on(this.InfoClientes, "set-features", lang.hitch(this, function(){
         that.clear()
         var inputClientes = document.getElementById("inputClientes")
+
         //enable navigation if more than one feature is selected
-        if (this.InfoClientes.features.length === 1){
-          inputClientes.style.display = 'none';
-          f = this.InfoClientes.features[0]
-          that.resaltarEnMapa(f, [78,206,186], 16)
-          var layerName = f.getLayer().name;
-          var layerid = f.getLayer().id;
-          console.log(layerName,layerid)
-          if(layerName.includes('CLIENTES')||layerName.includes('Clientes')||layerName.includes('cliente')){
-            var tipo_instalacion = f.attributes['tipo_instalacion'];
-            var id_troncal = f.attributes['id_troncal'];
-            var numerocliente = f.attributes['numerocliente'];
-            document.getElementById("idTroncal").value = id_troncal
-            document.getElementById("searchClient").value = numerocliente
-          }
-        }
-        
-        else if(this.InfoClientes.features.length > 1){
-          inputClientes.style.display = 'block';
-          f0 = this.InfoClientes.features[0]
-          that.resaltarEnMapa(f0, [78,206,186], 16)
+        if(this.InfoClientes.features.length > 0){
           /*- formulario para direcciones*/;
           this.InfoClientes.features.forEach(f => {
             var layerName = f.getLayer().name;
-            if(layerName.includes('CLIENTES')||layerName.includes('Clientes')||layerName.includes('cliente')){
-              // console.log(f.attributes)
-              var tipo_instalacion = f.attributes['tipo_instalacion'];
+            console.log(layerName);
+            if(layerName.toLowerCase().includes('cliente')){
+              inputClientes.style.display = this.InfoClientes.features.length > 1 ? 'block':'none';
+              that.set_Client(f);
+            } else if(layerName.toLowerCase().includes('service connection')){
+              console.log(layerName, this.InfoClientes.features.length, f.attributes)
               var id_troncal = f.attributes['id_troncal'];
-              var numerocliente = f.attributes['numerocliente'];
-              //add client in list
-              var clientInList = domConstruct.create("option",{
-                'value': numerocliente,
-                'id': numerocliente,
-                'innerHTML': numerocliente,
-              }, inputClientes);
-              //if client is troncal
-              if( id_troncal == numerocliente){
-                document.getElementById("idTroncal").value = id_troncal
-                document.getElementById("searchClient").value = numerocliente
-                clientInList.selected = true;
-              }
-              
+              that.search_Client_By_IDTRONCAL(id_troncal)
             }
           });
         }
         
-        else {
-          inputClientes.style.display = 'none';
-          that.clear();
-        }
+        //enable navigation if more than one feature is selected
+        if (this.InfoClientes.features.length === 0) that.clear();
+
       })));
       this.own(this.selChgEvt = on(this.map.infoWindow, "selection-change", lang.hitch(this, function (evt) {
         if(evt.target.getSelectedFeature()){
@@ -151,6 +122,45 @@ function(
           this.clear();
         }
       })));
+    },
+    search_Client_By_IDTRONCAL: function (id_troncal) {
+      that = this;
+      var query = new Query();
+      query.where = "id_troncal = " + id_troncal;
+      query.returnGeometry = true;
+      query.outFields = ['*'];
+      query.outSpatialReference= new SpatialReference(102100);
+      console.log(that.featureLy)
+      var qt = new QueryTask(that.featureLy);
+      console.log(qt)
+      qt.execute(query, function (response) {
+        console.log(response)
+        var inputClientes = document.getElementById("inputClientes")
+        inputClientes.style.display = response.features.length > 1 ? 'block':'none';
+
+        response.features.forEach(ft => {
+          console.log("busca clientes: ", ft);
+          that.set_Client(ft)
+        });
+      });
+    },
+
+    set_Client: function (f) {
+      // console.log(f.attributes)
+      var id_troncal = f.attributes['id_troncal'];
+      var numerocliente = f.attributes['numerocliente'];
+      //add client in list
+      var clientInList = domConstruct.create("option",{
+        'value': numerocliente,
+        'id': numerocliente,
+        'innerHTML': numerocliente,
+      }, inputClientes);
+      //if client is troncal
+      if( id_troncal == numerocliente){
+        document.getElementById("idTroncal").value = id_troncal
+        document.getElementById("searchClient").value = numerocliente
+        clientInList.selected = true;
+      }
     },
 
     _onclickBuscarClient: function () {
@@ -167,7 +177,7 @@ function(
       {
         document.getElementById("searchClient").value = nroCliente
         document.getElementById("idTroncal").value = idTroncal
-        query = new Query();
+        var query = new Query();
         query.returnGeometry = true;
         query.where = "NUMEROCLIENTE= " + nroCliente;
         query.outFields = ['*'];
@@ -292,7 +302,6 @@ function(
         const FECFAC = item.getElementsByTagName("FECFAC")[0].innerHTML.trim()
         const CONSUMO = Number(item.getElementsByTagName("CONSUMO")[0].innerHTML.trim())
         my = FECFAC.split("/")
-        console.log(that.meses,Number(my[1]), my[2].substring(2))
         monthYear = that.meses[Number(my[1])]+"/"+my[2].substring(2)
         chartData.push({ x: monthYear, y: CONSUMO })
         //??
