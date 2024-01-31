@@ -20,12 +20,14 @@ define([
   'esri/symbols/SimpleMarkerSymbol','esri/symbols/SimpleLineSymbol','esri/symbols/SimpleFillSymbol',
   'esri/Color',"esri/SpatialReference",'esri/geometry/webMercatorUtils',
   'dojox/charting/Chart','dojox/charting/themes/MiamiNice',
-  'dojox/charting/plot2d/Columns','dojox/charting/action2d/Highlight','dojox/charting/plot2d/Markers','dojox/charting/axis2d/Default','dojo/domReady!'
+  "dojox/charting/plot2d/Lines",'dojox/charting/plot2d/Columns',
+  'dojox/charting/action2d/Highlight',"dojox/charting/action2d/Tooltip","dojox/charting/action2d/Magnify",
+  "dojox/charting/widget/Legend",'dojox/charting/plot2d/Markers','dojox/charting/axis2d/Default','dojo/domReady!'
 ],
 function(
   declare, lang, Query, QueryTask, domConstruct, query, on, array, BaseWidget,FeatureLayer,Graphic, GraphicsLayer, portalUtils, portalUrlUtils,
   SimpleMarkerSymbol,SimpleLineSymbol, SimpleFillSymbol, Color, SpatialReference, webMercatorUtils,
-  Chart,theme, ColumnsPlot, Highlight
+  Chart,theme, LinesPlot, ColumnsPlot, Highlight, Tooltip, Magnify, Legend
   ) {
   //To create a widget, you need to derive from BaseWidget.
   return declare([BaseWidget], {
@@ -83,7 +85,7 @@ function(
     },
     
     eventoMapaCliente: function(){
-      that = this;
+      var that = this;
       this.own(this.setFeatsEvt = on(this.InfoClientes, "set-features", lang.hitch(this, function(){
         that.clear()
         var inputClientes = document.getElementById("inputClientes")
@@ -93,30 +95,21 @@ function(
           /*- formulario para direcciones*/;
           this.InfoClientes.features.forEach(f => {
             var layerName = f.getLayer().name;
-            console.log(layerName);
             if(layerName.toLowerCase().includes('cliente')){
+              that.resaltarEnMapa(f, [78,206,186], 16);
               inputClientes.style.display = this.InfoClientes.features.length > 1 ? 'block':'none';
               that.set_Client(f);
             } else if(layerName.toLowerCase().includes('service connection')){
-              console.log(layerName, this.InfoClientes.features.length, f.attributes)
+              that.resaltarEnMapa(f, [78,206,186], 16);
               var id_troncal = f.attributes['id_troncal'];
               that.search_Client_By_IDTRONCAL(id_troncal)
             }
           });
         }
-        
         //enable navigation if more than one feature is selected
         if (this.InfoClientes.features.length === 0) that.clear();
 
       })));
-      this.own(this.selChgEvt = on(this.map.infoWindow, "selection-change", lang.hitch(this, function (evt) {
-        if(evt.target.getSelectedFeature()){
-          // this.map.graphics.clear();
-          // this.clear();
-          console.log("selection-change\n", evt.target)
-        }
-      })));
-
       this.own(this.clearFeatsEvt = on(this.map.infoWindow, "clear-features", lang.hitch(this, function (evt) {
         if(!evt.isIntermediate){
           this.clear();
@@ -124,7 +117,7 @@ function(
       })));
     },
     search_Client_By_IDTRONCAL: function (id_troncal) {
-      that = this;
+      var that = this;
       var query = new Query();
       query.where = "id_troncal = " + id_troncal;
       query.returnGeometry = true;
@@ -139,7 +132,6 @@ function(
         });
       });
     },
-
     set_Client: function (f) {
       // console.log(f.attributes)
       var id_troncal = f.attributes['id_troncal'];
@@ -158,6 +150,134 @@ function(
       }
     },
 
+    crear_Grafico: function (data_xml){
+      var that = this
+      that.getPanel().setPosition({relativeTo: "map", top: 5, right: 5, bottom: 200, zIndex: 5, width: 560});
+
+      // Define the data
+      var i = 12
+      var chartX = new Array();
+      var chartY1 = new Array();
+      var chartY2 = new Array();
+
+      for (let item of data_xml) {
+        const FECFAC = item.getElementsByTagName("FECFAC")[0].innerHTML.trim()
+        const CONSUMO = Number(item.getElementsByTagName("CONSUMO")[0].innerHTML.trim())
+        const MONFAC = Number(item.getElementsByTagName("MONFAC")[0].innerHTML.trim())
+        my = FECFAC.split("/")
+        monthYear = that.meses[Number(my[1])]+"/"+my[2].substring(2)
+        //??
+        chartX.push({ value: i--, text: monthYear })
+        chartY1.push(CONSUMO)
+        chartY2.push(MONFAC)
+      }
+      var x_reverse = chartX.reverse()
+      var y1_reverse = chartY1.reverse()
+      var y2_reverse = chartY2.reverse()
+      
+      //Agregando grafico
+      that.clearNode("graficosClientes");
+      var titulo = domConstruct.create("div", {'class':'alert text-center col-sm-11', 'id':'titulo'}, "graficosClientes");
+      titulo.innerHTML = "\n\n<h6>Consumo y Facturación Mensual de Agua Potable</h6>";
+
+      //CREANDO GRAFICO
+      domConstruct.create("div", {'id':'grafico'}, "graficosClientes");
+      var chart = new Chart("grafico");
+      chart.setTheme(theme);
+      chart.addPlot("linea", {type: LinesPlot, markers: true});
+      chart.addPlot("columns", {type: ColumnsPlot, gap: 2});
+
+      chart.addAxis("x", { titleOrientation: "away", title: "Mes/año", labels: x_reverse, dropLabels: false});
+      chart.addAxis("y", { titleOrientation: "away", title: "Consumo / Facturación (m3)", vertical: true, includeZero: true}); //Facturación (m3)
+      chart.addSeries("&nbsp; Consumo Mensual (m3) &nbsp;", y1_reverse,{plot: "columns"});
+      chart.addSeries("&nbsp; Facturación (m3)     &nbsp;", y2_reverse,{plot: "linea"});
+
+      new Highlight(chart,"columns")
+      new Tooltip(chart,"linea");
+      new Magnify(chart,"linea");
+
+      // Render the chart!
+      chart.render();
+
+      // Create the legend
+      id = "legend_graf_" + Date.now()
+      console.log(id)
+      domConstruct.create("div", {'id':id}, "graficosClientes");
+      var legend = new Legend({ chart: chart }, id);
+      // setTimeout(() => {legend.destroy();}, 1000);
+      
+      return chart;
+    },
+    crear_Tabla: function (featureSelect, data_xml){
+      var that = this
+      //Atributos Tabla clientes
+      const attr = featureSelect.attributes;
+      const id_tmp = attr.numerocliente;
+      //Atributos SAP
+      const datasap_ultimomes = data_xml[0];
+      const SERVICIO = datasap_ultimomes.getElementsByTagName("SERVICIO")[0].innerHTML.trim();
+      const FECFAC   = datasap_ultimomes.getElementsByTagName("FECFAC" )[0].innerHTML.trim();
+      const LECTURA  = datasap_ultimomes.getElementsByTagName("LECTURA")[0].innerHTML.trim();
+      const CONSUMO  = datasap_ultimomes.getElementsByTagName("CONSUMO")[0].innerHTML.trim();
+      const MONFAC   = datasap_ultimomes.getElementsByTagName("MONFAC" )[0].innerHTML.trim();
+      const SALANT   = datasap_ultimomes.getElementsByTagName("SALANT" )[0].innerHTML.trim();
+      const TOTBOL   = datasap_ultimomes.getElementsByTagName("TOTBOL" )[0].innerHTML.trim();
+      const FOLIO    = datasap_ultimomes.getElementsByTagName("FOLIO" )[0].innerHTML.trim();
+      const TIPDOC   = datasap_ultimomes.getElementsByTagName("TIPDOC" )[0].innerHTML.trim();
+      const tipodoc  = TIPDOC == 33 ? "33 - Factura" : TIPDOC == 34 ? "34 - Factua Excenta" : TIPDOC == 39 ? "39 - boleta" : TIPDOC
+
+      console.log(attr, datasap_ultimomes);
+      var cardClient   = domConstruct.create("div", {'id':'ct_'.concat(id_tmp), 'class':'border-success card bg-light mb-3'}, "espacioCL");
+      var ClientHeader = domConstruct.create("div", {'id':'hd_'.concat(id_tmp), 'class':'border-success card-header'}, cardClient);
+      var clientBody   = domConstruct.create("div", {'id':'bd_'.concat(id_tmp), 'class':'border-success card-body'  }, cardClient);
+      var clientFoot   = domConstruct.create("div", {'id':'ft_'.concat(id_tmp), 'class':'border-success card-footer'}, cardClient);
+
+      //cabecera
+      var clientTittle = domConstruct.create("h6",   {'id':'tt_'.concat(id_tmp), 'class':'card-title text-success' }, ClientHeader);
+      clientTittle.innerHTML = "ID Troncal: "+ attr.id_troncal + " / Numero de Cliente: " + attr.numerocliente
+
+      //tabla de datos
+      var table = domConstruct.create("table", {'id':'tT_'.concat(id_tmp), 'class':'table table-condensed'}, clientBody);
+      var tBody = domConstruct.create("tbody", {'id':'bT_'.concat(id_tmp), 'class':''}, table);
+      //insert data:
+      // insert_row(tBody, "ID Troncal", attr.id_troncal)
+      // insert_row(tBody, "Número Cliente", attr.numerocliente)
+      insert_row(tBody, "Nombre", attr.nombre)
+      insert_row(tBody, "Dirección", attr.direccion)
+      insert_row(tBody, "Consumo Promedio AP", attr.consumo_promedio_ap)
+      // insert_row(tBody, "Consumo Promedio AS", attr.consumo_promedio_as)
+      insert_row(tBody, "Días Morosidad", attr.dias_morosidad)
+      insert_row(tBody, "Deuda", attr.deuda)
+      insert_row(tBody, "Tipo Medidor", attr.tipo_medidor)
+      insert_row(tBody, "", "")
+      insert_row(tBody, "Tipo Último Documento", tipodoc)
+      insert_row(tBody, "Última Lectura Facturada", LECTURA)
+      insert_row(tBody, "Saldo Anterior ($)", SALANT)
+      insert_row(tBody, "Cobro del mes ($)", Number(TOTBOL)*1000-Number(SALANT)*1000)
+
+      //pie de tabla
+      clientFoot.innerHTML  = "<h6>";
+      clientFoot.innerHTML += (attr.clie_ap == 'S')? "Cliente de Agua Potable" : "Cliente sin Agua Potable" ;
+      clientFoot.innerHTML += (attr.clie_as == 'S')? " / con servicio de Aguas Servidas" : " / sin servicio de Aguas Servidas" ;
+      clientFoot.innerHTML += "</h6>";
+
+      function insert_row (tBody, campo, valor){
+        var dat = tBody.insertRow(-1);
+        if (campo != "" || valor != ""){
+          dat.insertCell(-1).innerHTML = campo;
+          dat.insertCell(-1).innerHTML = ":";
+          dat.insertCell(-1).innerHTML = valor;
+        } else{
+          dat.insertCell();
+          dat.insertCell();
+          dat.insertCell();
+
+        }
+        dat.insertCell(-1).innerHTML =  "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+
+        dat.childNodes.forEach (hijo =>{hijo.style.padding = ".1rem";})
+      }
+    },
     _onclickBuscarClient: function () {
       var that = this
       var nroCliente = document.getElementById("searchClient").value;
@@ -181,10 +301,11 @@ function(
         qt.execute(query, function (response) {
           if (response.features.length > 0){
             response.features.forEach(ft => {
-              // that.Consulta_API(nroCliente)
-              that.emula_consulta(nroCliente)
-              cardCliente("espacioCL", ft)
               that.resaltarEnMapa(ft, [78,206,186], 16);
+              // SAP_data = that.Consulta_API(nroCliente)
+              SAP_data = that.emula_consulta()
+              that.crear_Grafico(SAP_data)
+              that.crear_Tabla(ft, SAP_data)
             });
           }else{
             document.getElementById("espacioCL").innerHTML = "<br><br>El cliente ingresado no existe.<br>";
@@ -193,34 +314,6 @@ function(
       }else{
         document.getElementById("espacioCL").innerHTML = "<br><br>Debe ingresar un numero de cliente para buscar.<br>";
       }
-      
-      //informacion del cliente
-      function cardCliente(div, featureSelect){
-        var attributes = featureSelect.attributes;
-        var nroCL = attributes.numerocliente;
-        console.log(attributes);
-        var cardClient   = domConstruct.create("div", {'id':'ct_'.concat(nroCL), 'class':'border-success card bg-light mb-3'}, div);
-        var ClientHeader = domConstruct.create("div", {'id':'hd_'.concat(nroCL), 'class':'border-success card-header'}, cardClient);
-        var clientBody   = domConstruct.create("div", {'id':'bd_'.concat(nroCL), 'class':'border-success card-body'  }, cardClient);
-        var clientFoot   = domConstruct.create("div", {'id':'ft_'.concat(nroCL), 'class':'border-success card-footer'}, cardClient);
-
-        var clientTittle = domConstruct.create("h6",   {'id':'tt_'.concat(nroCL), 'class':'card-title text-success' }, ClientHeader);
-
-        //cabecera
-        clientTittle.innerHTML = (attributes["clie_ap"] == 'S')? "Cliente AP" : "No Cliente AP" ;
-        clientTittle.innerHTML += (attributes["clie_as"] == 'S')? " / Cliente AS" : " / No Cliente AS" ;
-
-        //cuerpo
-        var Clienttexto  = domConstruct.create("p",    {'id':'tx_'.concat(nroCL), 'class':'card-text'  }, clientBody);
-        Clienttexto.innerHTML  = "datos clientes: ";
-
-        //cabecera
-        clientFoot.innerHTML = "<h4>";
-        clientFoot.innerHTML += attributes["direccion"];
-        // if(attributes["poblacion"] && attributes["poblacion"] != "") clientFoot.innerHTML +=", poblacion " +  attributes["poblacion"];
-        clientFoot.innerHTML += "</h4>";
-
-      };
     },
     selectClientInWidget: function (slct) {
       // this.clear()
@@ -228,7 +321,6 @@ function(
       var inputClientes = document.getElementById("inputClientes");
       searchClient.value = inputClientes.value
     },
-
     /*- CARGAR DATOS CLIENTES-*/
     getDataClientes: async function (numerocliente) {
       var portalUrl = portalUrlUtils.getStandardPortalUrl(this.appConfig.portalUrl);
@@ -283,61 +375,7 @@ function(
           console.log('error', error);
         });
     },
-    crear_Grafico: async function (data_xml){
-      that = this
-      that.getPanel().setPosition({relativeTo: "map", top: 5, right: 5, bottom: 200, zIndex: 5, width: 560});
-      
-      // Define the data
-      var i = 12
-      var chartX = new Array();
-      var chartY = new Array();
-      var chartData = new Array()
-      for (let item of data_xml) {
-        const FECFAC = item.getElementsByTagName("FECFAC")[0].innerHTML.trim()
-        const CONSUMO = Number(item.getElementsByTagName("CONSUMO")[0].innerHTML.trim())
-        my = FECFAC.split("/")
-        monthYear = that.meses[Number(my[1])]+"/"+my[2].substring(2)
-        chartData.push({ x: monthYear, y: CONSUMO })
-        //??
-        chartX.push({ value: i--, text: monthYear })
-        chartY.push(CONSUMO)
-      }
-      x_reverse = chartX.reverse()
-      y_reverse = chartY.reverse()
-      console.log(x_reverse,y_reverse)
-      
-      //Agregando grafico
-      that.clearNode("graficosClientes");
-      var titulo = domConstruct.create("div", {'class':'alert text-center col-sm-11', 'id':'titulo'}, "graficosClientes");
-      titulo.innerHTML = "\n\n<h6>Consumo Mensual de Agua Potable</h6>";
-      //CREANDO GRAFICO
-      var grafico = domConstruct.create("div", {'id':'grafico'}, "graficosClientes");
-      var chart = new Chart("grafico");
-      chart.setTheme(theme);
-      chart.addPlot("default", {type: ColumnsPlot, gap: 2});
-      chart.addAxis("x", { titleOrientation: "away", title:       "Mes/año", labels: x_reverse, dropLabels: false});
-      chart.addAxis("y", { titleOrientation: "away", title: "Consumo en m3", vertical: true, includeZero: true});
-      chart.addSeries("Consumo Mensual", y_reverse);
-      new Highlight(chart,"default")
-      chart.render();
-
-      return chart;
-    },
-    emula_consulta: async function (numerocliente){
-      that = this
-      const parser = new DOMParser();
-      /*-* /
-      fetch('./widgets/historialClientes/test-client.xml')
-        .then(res => res.text())
-        .then(text => {
-          const xmlDoc = parser.parseFromString(text,"text/xml");
-          that.crear_Grafico(xmlDoc.getElementsByTagName("item"))
-        });
-      /*-*/
-      const xmlDoc = parser.parseFromString(this.config.test_xml,"text/xml");
-      that.crear_Grafico(xmlDoc.getElementsByTagName("item"))
-    },
-    _test_1_ConsultaAPI: async function (numerocliente){
+    ConsultaAPI_test: async function (numerocliente){
       var that = this;
       var API_GIS = 'https://appdesa.essbio.cl/cliente/api/Clientes/_PASS_';
       API_GIS += numerocliente;
@@ -367,45 +405,21 @@ function(
         return arrayWait;
       }
     },
-    
-    _getClientesInMap: async function(featureSet){
-      var that = this;
-      that.featureSet = new Array();
-      that.waitTime = 0;
-      that.resaltarEnMapa(featureSet, [78,206,186], 16)
-
-      that.clearNode("tituloCL");
-      that.clearNode("graficosClientes");
-      that.clearNode("espacioCL");
-
-      // document.getElementById("espacioCL").innerHTML = "<br><br>Cargando datos de cliente. . .<br>";
-      // var gifLoad = "./configs/loading/images/predefined_loading_2.gif";
-      // domConstruct.create("img",{ 'src':gifLoad },"espacioCL");
-
-      var layerName = featureSet.getLayer().name;
-      //click en una planta, una mufa o un CTO;
-      if(layerName.includes('CLIENTES')||layerName.includes('Clientes')||layerName.includes('cliente')){
-        var numerocliente = featureSet.attributes["numerocliente"];
-        document.getElementById("searchClient").value = numerocliente
-        // that.Consulta_API(numerocliente)
-        // that.emula_consulta(numerocliente)
-      }
-      //funcion general para consultas en capas.
-      async function consultarObjetos(fs, where){
-        var QT =  new QueryTask(fs);
-
-        var qr = new Query();
-        qr.where = where;
-        qr.outFields = ["*"];
-        qr.returnGeometry = true;
-        qr.outSpatialReference = {wkid: 102100};
-
-        var response = QT.execute(qr);
-        var prom = await response.promise;
-        return prom.features;
-      };
+    emula_consulta: function (numerocliente){
+      var that = this
+      const parser = new DOMParser();
+      /*-* /
+      fetch('./widgets/historialClientes/test-client.xml')
+        .then(res => res.text())
+        .then(text => {
+          const xmlDoc = parser.parseFromString(text,"text/xml");
+          that.crear_Grafico(xmlDoc.getElementsByTagName("item"))
+        });
+      /*-*/
+      const xmlDoc = parser.parseFromString(this.config.test_xml,"text/xml");
+      item = xmlDoc.getElementsByTagName("item")
+      return item
     },
-
     /*- FUNCIONES SECUNDARIAS -*/
     resaltarEnMapa(feature, RGBA, size){
       if (feature){
@@ -435,84 +449,16 @@ function(
         // var stateExtent = feature.geometry.getExtent();//.expand(5.0);
         // this.map.setExtent(stateExtent);
       };
-    },
-    insertCellWithStyle: function(row, colspan, textAlign, BorderInline, bgColor, centerColor, innerHTML) {
-      var that = this;
-      //var celda = row.insertCell(cell);
-      var celda = row.insertCell(-1);
-
-      var borderSolid  = "thin solid #000";
-      celda.style.borderBlock = borderSolid;
-      celda.style.borderTop = borderSolid;
-      celda.style.borderBottom = borderSolid;
-      if(BorderInline == "inline"){
-        celda.style.borderInline = borderSolid;
-        celda.style.borderRight = borderSolid;
-        celda.style.borderLeft = borderSolid;
-      }
-      else if(BorderInline == "right"){
-        celda.style.borderRight = borderSolid;
-      }
-      else if(BorderInline == "left"){
-        celda.style.borderLeft = borderSolid;
-      }
-      if(centerColor != null) {
-        var contrasteColor = ContractColor(centerColor);
-        celda.style.color = contrasteColor;
-        celda.style.backgroundImage  = bgImagen(bgColor, centerColor, contrasteColor);
-      }
-      else if(bgColor != null) {
-        var contrasteColor = ContractColor(bgColor);
-        celda.style.color = contrasteColor;
-        celda.style.backgroundColor = bgColor;
-      }
-
-      celda.style.textAlign = textAlign //object.style.textAlign = "left|right|center|justify|initial|inherit" 
-      celda.style.verticalAlign = "middle";
-      celda.style.padding = ".1rem";
-      celda.style.fontSize = "small";
-      celda.colSpan = colspan;
-
-      if(innerHTML) {
-        celda.innerHTML = innerHTML;
-      }
-      function bgImagen(border, backgr, line){
-        var str = "url(\"data:image/svg+xml, "
-          str += "<svg version='1.1' xmlns='http://www.w3.org/2000/svg' >"
-            if(border) str += "<rect width='10%' height='100%' style='fill: " + border + ";'/>"
-            str += "<rect y='20%' width='100%' height= '60%' style='fill: " + backgr + ";'/>"
-            str += "<line x1='0' y1='20%' x2='100%' y2='20%' style='stroke:" + line + ";stroke-width:0.5'/>"
-            str += "<line x1='0' y1='80%' x2='100%' y2='80%' style='stroke:" + line + ";stroke-width:0.5'/>"
-          str += "</svg>"
-        str += "\")";
-        return str
-      }
-      function ContractColor(color){
-        var leftRGBA = color.split('rgba(');
-        if(leftRGBA.length > 1){
-          var rightRGBA = leftRGBA[1].split(')');
-          var RGBA = rightRGBA[0].split(', ');
-          var R = RGBA[0], G = RGBA[1], B = RGBA[2];
-        }
-        else{
-          var R = 0, G = 0, B = 0;
-        }
-       
-        var lum = (((0.299 * R) + ((0.587 * G) + (0.114 * B))));
-        return lum > 186 ? "rgba(0, 0, 0, 1)" : "rgba(255, 255, 255, 1)";
-      }
-      return celda;
     }, 
     awaitResolve: function(wait){
       return new Promise(resolve=>setTimeout(()=>resolve(wait),500))
     },
-  
     clear : function (){
       console.clear();
       this.map.graphics.clear();
       this.clearNode("tituloCL");
       this.clearNode("inputClientes");
-      that.clearNode("graficosClientes");
+      this.clearNode("graficosClientes");
       this.clearNode("espacioCL");
       this.getPanel().setPosition({relativeTo: "map", top: 5, right: 5, bottom: 5, zIndex: 5, width: 360});
       document.getElementById("idTroncal").value = ""
