@@ -130,16 +130,11 @@ function(
       query.returnGeometry = true;
       query.outFields = ['*'];
       query.outSpatialReference= new SpatialReference(102100);
-      console.log(that.featureLy)
       var qt = new QueryTask(that.featureLy);
-      console.log(qt)
       qt.execute(query, function (response) {
-        console.log(response)
         var inputClientes = document.getElementById("inputClientes")
         inputClientes.style.display = response.features.length > 1 ? 'block':'none';
-
         response.features.forEach(ft => {
-          console.log("busca clientes: ", ft);
           that.set_Client(ft)
         });
       });
@@ -181,17 +176,16 @@ function(
         query.returnGeometry = true;
         query.where = "NUMEROCLIENTE= " + nroCliente;
         query.outFields = ['*'];
-        // const CLIENTES_LAYER = new FeatureLayer({url:"https://sigdesa.essbio.cl/server/rest/services/CLIENTES/FeatureServer/2"});
 
-        var layer = that.map.getLayer('CLIENTES_1779')
-        layer.selectFeatures(query, FeatureLayer.SELECTION_NEW, function(results){
-          if (results.length > 0){
-            results.forEach(ft => {
+        var qt = new QueryTask(that.featureLy);
+        qt.execute(query, function (response) {
+          if (response.features.length > 0){
+            response.features.forEach(ft => {
               // that.Consulta_API(nroCliente)
               that.emula_consulta(nroCliente)
               cardCliente("espacioCL", ft)
               that.resaltarEnMapa(ft, [78,206,186], 16);
-            })
+            });
           }else{
             document.getElementById("espacioCL").innerHTML = "<br><br>El cliente ingresado no existe.<br>";
           }
@@ -331,13 +325,17 @@ function(
     },
     emula_consulta: async function (numerocliente){
       that = this
+      const parser = new DOMParser();
+      /*-* /
       fetch('./widgets/historialClientes/test-client.xml')
         .then(res => res.text())
         .then(text => {
-          const parser = new DOMParser();
           const xmlDoc = parser.parseFromString(text,"text/xml");
           that.crear_Grafico(xmlDoc.getElementsByTagName("item"))
         });
+      /*-*/
+      const xmlDoc = parser.parseFromString(this.config.test_xml,"text/xml");
+      that.crear_Grafico(xmlDoc.getElementsByTagName("item"))
     },
     _test_1_ConsultaAPI: async function (numerocliente){
       var that = this;
